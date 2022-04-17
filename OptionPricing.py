@@ -8,6 +8,8 @@ import numpy as np
 from scipy.stats import norm
 from scipy.optimize import minimize
 from Heston import Heston
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 class EuroOption(Heston):
     def __init__(self, stockPrice, strike, vol, rate, maturity, dividend=0,optionType = "call"):
@@ -52,7 +54,7 @@ class EuroOption(Heston):
               /(vol*(np.sqrt(maturity))))
         return (S0*norm.pdf(d1)*np.sqrt(maturity))[:,0]
 
-    def _getBS_ImpVol(self,targetPrice,MAX_ITERATIONS = 200,PRECISION = 1.0e-5):
+    def _getBS_ImpVol(self,targetPrice,MAX_ITERATIONS = 200,PRECISION = 1.0e-6):
         #sigma = np.empty_like(self.price_BS_analytical().shape)
         initGuess= 0.5
         sigma = np.full_like(self.price_BS_analytical(), initGuess)# empty_like(self.price_BS_analytical().shape)
@@ -160,21 +162,43 @@ L = 10
 a = c1 - L*np.sqrt(c2 - np.sqrt(c4)) # we use +/- L*sqrt(T)
 b = c1 + L*np.sqrt(c2 - np.sqrt(c4))
 
+years = 10 #Farthest maturity
+mat = [7/360, 30/360, 0.5]
+mat.extend([i for i in range(1,years)])
+HestonPrices = np.empty([K.shape[0],len(mat)])
+BS_IVs = np.empty_like(HestonPrices)
+for i in range(0,len(mat)):
+    T = mat[i]
+    option = EuroOption(S0,K,np.sqrt(v0),r,T) #setting sigma(IV)^2 = v0
+    option.initializeHestonParameters(kappa,vbar,gamma,rho,v0,S0,r,T)
+    prices = option.price_Heston_CosMethod(a,b,N)
+    HestonPrices[:,i] = prices
+    BS_IVs[:,i] = option._getBS_ImpVol(prices)
 
-option = EuroOption(S0,K,np.sqrt(v0),r,T) #setting sigma(IV)^2 = v0
-option.initializeHestonParameters(kappa,vbar,gamma,rho,v0,S0,r,T)
-print(option.price_BS_analytical())
-print(option.price_Heston_CosMethod(a,b,N))
-print(option.BS_vega())
-tp = np.array([ 5.2773078,7.55696785])
-#tp = np.array([ 9.2773078,11.55696785])
-print("+"*5)
-print(option._getBS_ImpVol(targetPrice=tp))
-sigma_new = option._getBS_ImpVol(targetPrice=tp)
-print("Vbar: {}".format(np.sqrt(vbar)))
-option2 = EuroOption(S0,K,sigma_new,r,T)
-print(option2.price_BS_analytical())
+#Check if the BS analytical price matched using computed IV's
+BS_analyticalPrice = np.empty_like(HestonPrices)
+for i in range(0,len(mat)):
+    T = mat[i]
+    sigma_new = BS_IVs[:,i]
+    option2 = EuroOption(S0, K, sigma_new, r, T)
+    BS_analyticalPrice[:,i] = option2.price_BS_analytical()
 
-# k_log = np.log(K)
-# t_max = 50
-# print(option.price_FourierMethod(t_max,N))
+diff = HestonPrices - BS_analyticalPrice
+
+#def plot_surface(data, x_axis,y_axis)
+
+data = BS_IVs
+
+fig = plt.figure(figsize=(4,4))
+ax = Axes3D(fig)
+
+mats, strikes = np.meshgrid(mat,K)
+print(strikes)
+print(mats)
+print(data.shape)
+
+ax.plot_surface(strikes, mats, data, cmap='coolwarm', linewidth=0, antialiased=False)
+ax.set_xlabel('time')
+ax.set_ylabel('strike price')
+ax.set_zlabel('IV Vol')
+plt.show()
