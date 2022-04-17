@@ -62,10 +62,10 @@ class EuroOption(Heston):
             sigma = sigma.reshape([len(sigma),1])
             price = self.price_BS_analytical(vol=sigma)
             diff = price - targetPrice.reshape(price.shape)
-            return sum(diff**2)
+            return sum(abs(diff))
         #print(objFunc(sigma).shape)
         options = {'maxiter': MAX_ITERATIONS}
-        res = minimize(objFunc, sigma, method='SLSQP', options=options,tol=PRECISION)
+        res = minimize(objFunc, sigma, method='BFGS', options=options,tol=PRECISION)
         # for i in range(0, MAX_ITERATIONS):
         #     price = self.price_BS_analytical(vol=sigma)[:,0]
         #     vega = self.BS_vega(vol=sigma)
@@ -117,8 +117,6 @@ class EuroOption(Heston):
 
         price[:,1:] = H_k(a,b,k)*self.Heston_Char_func(k*np.pi/(b-a))*np.exp(1j*k*np.pi*(x0 - a)/(b-a))
 
-        #return (np.real((np.exp(1j*k*np.pi*(x0 - a)/(b-a))).dot(H_k(a,b,k)*self.Heston_Char_func(k*np.pi/(b-a))))
-        #        *np.exp(-self.rfr*self.maturity)*self.strike)
         return np.diag(np.sum(price.real, axis = 1)*np.exp(-self.rfr*self.maturity)*self.strike)
 
 #TODO: Correct the fourier method. Chnage the adjusted characterstic function in Heston
@@ -153,6 +151,7 @@ S0 = 100
 r = 0.03
 T = 0.5
 N = 1000
+#K = np.array([95,100,105])
 K = np.array([90,95,100,105,110])
 
 c1 = 0
@@ -164,7 +163,7 @@ b = c1 + L*np.sqrt(c2 - np.sqrt(c4))
 
 years = 10 #Farthest maturity
 mat = [7/360, 30/360, 0.5]
-mat.extend([i for i in range(1,years)])
+mat.extend([i for i in range(1,years+1)])
 HestonPrices = np.empty([K.shape[0],len(mat)])
 BS_IVs = np.empty_like(HestonPrices)
 for i in range(0,len(mat)):
@@ -193,12 +192,25 @@ fig = plt.figure(figsize=(4,4))
 ax = Axes3D(fig)
 
 mats, strikes = np.meshgrid(mat,K)
-print(strikes)
-print(mats)
-print(data.shape)
 
-ax.plot_surface(strikes, mats, data, cmap='coolwarm', linewidth=0, antialiased=False)
+
+ax.plot_surface(mats, strikes, data, cmap='coolwarm', linewidth=0, antialiased=False)
 ax.set_xlabel('time')
-ax.set_ylabel('strike price')
+ax.set_ylabel('strike')
 ax.set_zlabel('IV Vol')
 plt.show()
+
+
+fig1, ax1 = plt.subplots()
+for i in range(9,len(mat)):
+    ax1.plot(K,data[:,i],label = "maturity {} years".format(mat[i]))
+ax1.grid()
+ax1.legend()
+#ax.set_xticks(np.arange(0, 50001, 5000))
+ax1.set_xlabel("Strikes")
+ax.set_ylabel("BS IV")
+ax.set_title("IV")
+plt.show()
+
+# print(data[:,9])
+# print(diff[:,9])
