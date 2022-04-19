@@ -5,11 +5,14 @@ Created on Sat Apr 16 20:12:04 2022
 @author: abhishek bansal
 """
 import numpy as np
+import pandas as pd
 from scipy.stats import norm
 from scipy.optimize import minimize
 from Heston import Heston
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+
+outputPath = r"output/"
 
 class EuroOption(Heston):
     def __init__(self, stockPrice, strike, vol, rate, maturity, dividend=0,optionType = "call"):
@@ -54,7 +57,7 @@ class EuroOption(Heston):
               /(vol*(np.sqrt(maturity))))
         return (S0*norm.pdf(d1)*np.sqrt(maturity))[:,0]
 
-    def _getBS_ImpVol(self,targetPrice,MAX_ITERATIONS = 200,PRECISION = 1.0e-6):
+    def _getBS_ImpVol(self,targetPrice,MAX_ITERATIONS = 200,PRECISION = 1.0e-12):
         #sigma = np.empty_like(self.price_BS_analytical().shape)
         initGuess= 0.5
         sigma = np.full_like(self.price_BS_analytical(), initGuess)# empty_like(self.price_BS_analytical().shape)
@@ -139,78 +142,110 @@ class EuroOption(Heston):
 
 
 
-# Heston Parameters
-v0 = 0.06
-kappa = 9
-vbar = 0.06
-gamma = 0.5
-rho = -0.4
-
-# Option Parameters
-S0 = 100
-r = 0.03
-T = 0.5
-N = 1000
-#K = np.array([95,100,105])
-K = np.array([90,95,100,105,110])
-
-c1 = 0
-c2 = T
-c4 = 0
-L = 10
-a = c1 - L*np.sqrt(c2 - np.sqrt(c4)) # we use +/- L*sqrt(T)
-b = c1 + L*np.sqrt(c2 - np.sqrt(c4))
-
-years = 10 #Farthest maturity
-mat = [7/360, 30/360, 0.5]
-mat.extend([i for i in range(1,years+1)])
-HestonPrices = np.empty([K.shape[0],len(mat)])
-BS_IVs = np.empty_like(HestonPrices)
-for i in range(0,len(mat)):
-    T = mat[i]
-    option = EuroOption(S0,K,np.sqrt(v0),r,T) #setting sigma(IV)^2 = v0
-    option.initializeHestonParameters(kappa,vbar,gamma,rho,v0,S0,r,T)
-    prices = option.price_Heston_CosMethod(a,b,N)
-    HestonPrices[:,i] = prices
-    BS_IVs[:,i] = option._getBS_ImpVol(prices)
-
-#Check if the BS analytical price matched using computed IV's
-BS_analyticalPrice = np.empty_like(HestonPrices)
-for i in range(0,len(mat)):
-    T = mat[i]
-    sigma_new = BS_IVs[:,i]
-    option2 = EuroOption(S0, K, sigma_new, r, T)
-    BS_analyticalPrice[:,i] = option2.price_BS_analytical()
-
-diff = HestonPrices - BS_analyticalPrice
-
-#def plot_surface(data, x_axis,y_axis)
-
-data = BS_IVs
-
-fig = plt.figure(figsize=(4,4))
-ax = Axes3D(fig)
-
-mats, strikes = np.meshgrid(mat,K)
+def plot_surface(data, x_axis,y_axis,x_label = "Xlabel",y_label="Ylabel", z_label = "Zlabel",
+                 title="title",save=False,filePath=None,fsize=(8,8)):
+    fig = plt.figure(figsize=fsize)
+    ax = Axes3D(fig)
+    X, Y = np.meshgrid(x_axis,y_axis)
+    ax.plot_surface(X, Y, data, cmap='coolwarm', linewidth=0, antialiased=False)
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+    ax.set_zlabel(z_label)
+    plt.show()
+    if save:
+        if filePath is None:
+            print("Input filepath to save figure")
+        fig.savefig(filePath)
 
 
-ax.plot_surface(mats, strikes, data, cmap='coolwarm', linewidth=0, antialiased=False)
-ax.set_xlabel('time')
-ax.set_ylabel('strike')
-ax.set_zlabel('IV Vol')
-plt.show()
+if __name__ == "__main__":
+    import time
+    import sys
+    # Heston Parameters
+    v0 = 0.06
+    kappa = 9
+    vbar = 0.06
+    gamma = 0.5
+    rho = -0.4
+
+    # Option Parameters
+    S0 = 100
+    r = 0.03
+    T = 0.5
+    N = 10000
+    # K = np.array([95,100,105])
+    K = np.array([90, 95, 100, 105, 110])
+
+    # c1 = 0
+    # c2 = T
+    # c4 = 0
+    lst_L = [5, 8, 10, 12, 15, 20, 25, 30]
+    # a = c1 - L*np.sqrt(c2 - np.sqrt(c4)) # we use +/- L*sqrt(T)
+    # b = c1 + L*np.sqrt(c2 - np.sqrt(c4))
+    start = time.time()
+    for L in lst_L:
+        loopstart = time.time()
+        years = 25  # Farthest maturity
+        mat = [7 / 360, 14 / 360, 30 / 360, 60 / 360, 0.5]
+        mat.extend([i for i in range(1, years + 1)])
+        HestonPrices = np.empty([K.shape[0], len(mat)])
+        BS_IVs = np.empty_like(HestonPrices)
+        for i in range(0, len(mat)):
+            T = mat[i]
+            option = EuroOption(S0, K, np.sqrt(v0), r, T)  # setting sigma(IV)^2 = v0
+            option.initializeHestonParameters(kappa, vbar, gamma, rho, v0, S0, r, T)
+            a = -L * np.sqrt(T)
+            b = L * np.sqrt(T)
+            prices = option.price_Heston_CosMethod(a, b, N)
+            HestonPrices[:, i] = prices
+            BS_IVs[:, i] = option._getBS_ImpVol(prices)
+
+        # Check if the BS analytical price matched using computed IV's
+        BS_analyticalPrice = np.empty_like(HestonPrices)
+        for i in range(0, len(mat)):
+            T = mat[i]
+            sigma_new = BS_IVs[:, i]
+            option2 = EuroOption(S0, K, sigma_new, r, T)
+            BS_analyticalPrice[:, i] = option2.price_BS_analytical()
+
+        diff = HestonPrices - BS_analyticalPrice
+        path = outputPath + "BSImpVol_Surface_N{}k_L{}".format(int(N / 1000), L)
+        plot_surface(BS_IVs.T, K, mat, x_label="Strikes", y_label="Time to Maturity", z_label="BS Imp Vol",
+                     title="BS ImpVol Surface", save=True, filePath=path+".png")
+        plot_surface(diff.T, K, mat, x_label="Strikes", y_label="Time to Maturity", z_label="Diff",
+                     title="Price Difference", save=True, filePath=path+"_priceDiff.png")
 
 
-fig1, ax1 = plt.subplots()
-for i in range(9,len(mat)):
-    ax1.plot(K,data[:,i],label = "maturity {} years".format(mat[i]))
-ax1.grid()
-ax1.legend()
-#ax.set_xticks(np.arange(0, 50001, 5000))
-ax1.set_xlabel("Strikes")
-ax.set_ylabel("BS IV")
-ax.set_title("IV")
-plt.show()
+        cols = ["1w","2w","1M","3M","6M"]
+        cols.extend(["{}Y".format(i) for i in range(1, years + 1)])
+        df_BS = pd.DataFrame(data=BS_IVs,
+                             index=K,
+                             columns=cols)
+        df_diff = pd.DataFrame(data=diff,
+                             index=K,
+                             columns=cols)
+        writer = pd.ExcelWriter(path+".xlsx", engine='xlsxwriter')
+        workbook = writer.book
+        worksheet1 = workbook.add_worksheet('BS_ImpVolSurface')
+        worksheet2= workbook.add_worksheet('diff_HestonVsBSPrice')
+        writer.sheets['BS_ImpVolSurface'] = worksheet1
+        writer.sheets['diff_HestonVsBSPrice'] = worksheet2
+
+        df_BS.to_excel(writer, sheet_name='BS_ImpVolSurface', startrow=0, startcol=0)
+        df_diff.to_excel(writer, sheet_name='diff_HestonVsBSPrice', startrow=0, startcol=0)
+        writer.save()
+    end = time.time()
+    print("Total runtime: {:.5f}s".format((end-start)))
+# fig1, ax1 = plt.subplots()
+# for i in range(9,len(mat)):
+#     ax1.plot(K,data[:,i],label = "maturity {} years".format(mat[i]))
+# ax1.grid()
+# ax1.legend()
+# #ax.set_xticks(np.arange(0, 50001, 5000))
+# ax1.set_xlabel("Strikes")
+# ax.set_ylabel("BS IV")
+# ax.set_title("IV")
+# plt.show()
 
 # print(data[:,9])
 # print(diff[:,9])
