@@ -143,7 +143,7 @@ class EuroOption(Heston):
 
 
 def plot_surface(data, x_axis,y_axis,x_label = "Xlabel",y_label="Ylabel", z_label = "Zlabel",
-                 title="title",save=False,filePath=None,fsize=(8,8)):
+                 title="title",save=False,filePath=None,fsize=(8,8),show=False):
     fig = plt.figure(figsize=fsize)
     ax = Axes3D(fig)
     X, Y = np.meshgrid(x_axis,y_axis)
@@ -151,12 +151,12 @@ def plot_surface(data, x_axis,y_axis,x_label = "Xlabel",y_label="Ylabel", z_labe
     ax.set_xlabel(x_label)
     ax.set_ylabel(y_label)
     ax.set_zlabel(z_label)
-    plt.show()
     if save:
         if filePath is None:
             print("Input filepath to save figure")
         fig.savefig(filePath)
-
+    if show:
+        plt.show()
 
 if __name__ == "__main__":
     import time
@@ -209,12 +209,15 @@ if __name__ == "__main__":
             BS_analyticalPrice[:, i] = option2.price_BS_analytical()
 
         diff = HestonPrices - BS_analyticalPrice
-        path = outputPath + "BSImpVol_Surface_N{}k_L{}".format(int(N / 1000), L)
+        path_surface = outputPath + "BSImpVol_Surface_N{}k_L{}".format(int(N / 1000), L)
+        path_diff = outputPath + "HestonVsBS_Diff_Surface_N{}k_L{}".format(int(N / 1000), L)
+        path_priceSurface = outputPath + "HestonPrice_Surface_N{}k_L{}".format(int(N / 1000), L)
         plot_surface(BS_IVs.T, K, mat, x_label="Strikes", y_label="Time to Maturity", z_label="BS Imp Vol",
-                     title="BS ImpVol Surface", save=True, filePath=path+".png")
+                     title="BS ImpVol Surface", save=True, filePath=path_surface+".png")
         plot_surface(diff.T, K, mat, x_label="Strikes", y_label="Time to Maturity", z_label="Diff",
-                     title="Price Difference", save=True, filePath=path+"_priceDiff.png")
-
+                     title="Price Difference", save=True, filePath=path_diff+"_priceDiff.png")
+        plot_surface(HestonPrices.T, K, mat, x_label="Strikes", y_label="Time to Maturity", z_label="BS Imp Vol",
+                     title="Heston Surface", save=True, filePath=path_priceSurface+".png")
 
         cols = ["1w","2w","1M","3M","6M"]
         cols.extend(["{}Y".format(i) for i in range(1, years + 1)])
@@ -224,15 +227,21 @@ if __name__ == "__main__":
         df_diff = pd.DataFrame(data=diff,
                              index=K,
                              columns=cols)
-        writer = pd.ExcelWriter(path+".xlsx", engine='xlsxwriter')
+        df_HestonPrices = pd.DataFrame(data=HestonPrices,
+                             index=K,
+                             columns=cols)
+        writer = pd.ExcelWriter(path_surface+".xlsx", engine='xlsxwriter')
         workbook = writer.book
         worksheet1 = workbook.add_worksheet('BS_ImpVolSurface')
         worksheet2= workbook.add_worksheet('diff_HestonVsBSPrice')
+        worksheet3 = workbook.add_worksheet('HestonPrices')
         writer.sheets['BS_ImpVolSurface'] = worksheet1
         writer.sheets['diff_HestonVsBSPrice'] = worksheet2
+        writer.sheets['HestonPrices'] = worksheet3
 
         df_BS.to_excel(writer, sheet_name='BS_ImpVolSurface', startrow=0, startcol=0)
         df_diff.to_excel(writer, sheet_name='diff_HestonVsBSPrice', startrow=0, startcol=0)
+        df_HestonPrices.to_excel(writer, sheet_name='HestonPrices', startrow=0, startcol=0)
         writer.save()
     end = time.time()
     print("Total runtime: {:.5f}s".format((end-start)))
