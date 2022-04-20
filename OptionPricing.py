@@ -172,15 +172,10 @@ if __name__ == "__main__":
     lst_L = [5, 8, 10, 12, 15, 20, 25, 30]
     # a = c1 - L*np.sqrt(c2 - np.sqrt(c4)) # we use +/- L*sqrt(T)
     # b = c1 + L*np.sqrt(c2 - np.sqrt(c4))
-    start = time.time()
+
     years = 25  # Farthest maturity
     mat = [14 / 360, 30 / 360, 60 / 360, 0.5]
     mat.extend([i for i in range(1, years + 1)])
-    # L = 10
-    # T = 0.5
-    # a = -L * np.sqrt(T)
-    # b = L * np.sqrt(T)
-    # prices = price_Heston_CosMethod(S0, K, kappa, vbar, gamma, rho, v0, rfr=r, maturity=T, a=a, b=b, N=N)
     for L in lst_L:
         loopstart = time.time()
         HestonPrices = np.empty([K.shape[0], len(mat)])
@@ -194,8 +189,7 @@ if __name__ == "__main__":
 
         df_HestonPrices = pd.DataFrame(data = HestonPrices.T, index=mat, columns = K)
         df_HestonPrices.reset_index(inplace=True)
-        #print(df_HestonPrices)
-        # print(df_HestonPrices.loc[90,:])
+
         df_BS_IV = pd.DataFrame()
         for strike in K:
             df_BS_IV[strike] = df_HestonPrices.apply(lambda x: getBS_ImpVol(x[strike],100,
@@ -247,18 +241,3 @@ if __name__ == "__main__":
         df_diff.to_excel(writer, sheet_name='diff_HestonVsBSPrice', startrow=0, startcol=0)
         df_HestonPrices.to_excel(writer, sheet_name='HestonPrices', startrow=0, startcol=0)
         writer.save()
-#     end = time.time()
-#     print("Total runtime: {:.5f}s".format((end-start)))
-# fig1, ax1 = plt.subplots()
-# for i in range(9,len(mat)):
-#     ax1.plot(K,data[:,i],label = "maturity {} years".format(mat[i]))
-# ax1.grid()
-# ax1.legend()
-# #ax.set_xticks(np.arange(0, 50001, 5000))
-# ax1.set_xlabel("Strikes")
-# ax.set_ylabel("BS IV")
-# ax.set_title("IV")
-# plt.show()
-
-# print(data[:,9])
-# print(diff[:,9])
