@@ -52,7 +52,7 @@ def getBS_ImpVol(targetPrice,S0,strike,rfr,maturity,optionType="call",MAX_ITERAT
             iv = brentq(errFunc, a, b, args=(targetPrice,S0,strike,rfr,maturity,optionType))
         except:
             iv = 0.000001
-        return iv
+            return iv
     #df['iv'] = df.apply(lambda x: brentqc(objFunc,0.00001,50,args=(targetPrice,S0,strike,rfr,maturity,optionType="call"),axis=1)
     #print(objFunc(sigma).shape)
     # options = {'maxiter': MAX_ITERATIONS}
@@ -131,6 +131,23 @@ def price_FourierMethod(t_max,N):
     pass
 
 
+def monteCarlo_conditional(kappa, vbar, gamma, S0, strike, v0,rfr,maturity,optionType = "call", dt=1/250, NoOfsims=1000):
+    timeSteps = int(maturity/dt)
+    mat_var = np.zeros((NoOfsims, timeSteps))
+
+    mat_var[:, 0] = v0
+
+    for t in range(1, timeSteps):
+        Z = np.random.standard_normal(NoOfsims)
+        mat_var[:,t] = np.maximum(Heston.cir_process(kappa, vbar, gamma, Z, dt, mat_var[:, t-1]),0)
+    #print(mat_var)
+    mat_var_total = np.mean(mat_var, axis=1)
+    mat_option_prices = np.zeros((NoOfsims,len(strike)))
+    for i in range(0, len(strike)):
+        mat_option_prices[:,i] = price_BS_analytical(S0, strike[i], rfr, mat_var[:,-1], maturity, optionType)
+
+    return np.mean(mat_option_prices, axis=0)
+
 
 def plot_surface(data, x_axis,y_axis,x_label = "Xlabel",y_label="Ylabel", z_label = "Zlabel",
                  title="title",save=False,filePath=None,fsize=(8,8),show=False):
@@ -163,81 +180,93 @@ if __name__ == "__main__":
     r = 0.03
     T = 0.5
     N = 1000
-    # K = np.array([95,100,105])
-    K = np.array([90, 95, 100, 105, 110])
 
-    # c1 = 0
-    # c2 = T
-    # c4 = 0
-    lst_L = [5, 8, 10, 12, 15, 20, 25, 30]
-    # a = c1 - L*np.sqrt(c2 - np.sqrt(c4)) # we use +/- L*sqrt(T)
-    # b = c1 + L*np.sqrt(c2 - np.sqrt(c4))
-
-    years = 25  # Farthest maturity
-    mat = [14 / 360, 30 / 360, 60 / 360, 0.5]
-    mat.extend([i for i in range(1, years + 1)])
-    for L in lst_L:
-        loopstart = time.time()
-        HestonPrices = np.empty([K.shape[0], len(mat)])
-        BS_IVs = np.empty_like(HestonPrices)
-        for i in range(0, len(mat)):
-            T = mat[i]
-            a = -L * np.sqrt(T)
-            b = L * np.sqrt(T)
-            prices = price_Heston_CosMethod(S0,K,kappa, vbar, gamma, rho,v0,rfr=r,maturity=T,a=a,b=b,N=N)
-            HestonPrices[:, i] = prices
-
-        df_HestonPrices = pd.DataFrame(data = HestonPrices.T, index=mat, columns = K)
-        df_HestonPrices.reset_index(inplace=True)
-
-        df_BS_IV = pd.DataFrame()
-        for strike in K:
-            df_BS_IV[strike] = df_HestonPrices.apply(lambda x: getBS_ImpVol(x[strike],100,
-                                                                                        strike,
-                                                                                        0.03,
-                                                                                        x['index'],
-                                                                                        "call"), axis=1)
-
-        # Check if the BS analytical price matched using computed IV's
-        BS_analyticalPrice = np.empty_like(HestonPrices)
-        for i in range(0, len(mat)):
-            T = mat[i]
-            sigma_new = df_BS_IV.loc[i, :]
-            BS_analyticalPrice[:, i] = price_BS_analytical(S0, K, r, sigma_new, T)
+#    K = np.array([90, 95, 100, 105, 110])
+    K = [100]
+    c1 = 0
+    c2 = T
+    c4 = 0
+    L = 10
+    a = c1 - L * np.sqrt(c2 - np.sqrt(c4))  # we use +/- L*sqrt(T)
+    b = c1 + L * np.sqrt(c2 - np.sqrt(c4))
+    print(price_Heston_CosMethod(S0, K, kappa, vbar, gamma, rho, v0, rfr=r, maturity=T, a=a, b=b, N=N))
+    print(monteCarlo_conditional(kappa, vbar, gamma, S0, K, v0, r, T, optionType="call", dt=1 / 250,
+                           NoOfsims=1000))
 
 
-        diff = HestonPrices - BS_analyticalPrice
-        path_surface = outputPath + "BSImpVol_Surface_N{}k_L{}".format(int(N / 1000), L)
-        path_diff = outputPath + "HestonVsBS_Diff_Surface_N{}k_L{}".format(int(N / 1000), L)
-        path_priceSurface = outputPath + "HestonPrice_Surface_N{}k_L{}".format(int(N / 1000), L)
-        plot_surface(df_BS_IV.to_numpy(), K, mat, x_label="Strikes", y_label="Time to Maturity", z_label="BS Imp Vol",
-                     title="BS ImpVol Surface", save=True, filePath=path_surface+".png")
-        plot_surface(diff.T, K, mat, x_label="Strikes", y_label="Time to Maturity", z_label="Diff",
-                     title="Price Difference", save=True, filePath=path_diff+"_priceDiff.png")
-        plot_surface(HestonPrices.T, K, mat, x_label="Strikes", y_label="Time to Maturity", z_label="BS Imp Vol",
-                     title="Heston Surface", save=True, filePath=path_priceSurface+".png")
 
-        cols = ["2w","1M","3M","6M"]
-        cols.extend(["{}Y".format(i) for i in range(1, years + 1)])
-        df_BS = pd.DataFrame(data=df_BS_IV.to_numpy().T,
-                             index=K,
-                             columns=cols)
-        df_diff = pd.DataFrame(data=diff,
-                             index=K,
-                             columns=cols)
-        df_HestonPrices = pd.DataFrame(data=HestonPrices,
-                             index=K,
-                             columns=cols)
-        writer = pd.ExcelWriter(path_surface+".xlsx", engine='xlsxwriter')
-        workbook = writer.book
-        worksheet1 = workbook.add_worksheet('BS_ImpVolSurface')
-        worksheet2= workbook.add_worksheet('diff_HestonVsBSPrice')
-        worksheet3 = workbook.add_worksheet('HestonPrices')
-        writer.sheets['BS_ImpVolSurface'] = worksheet1
-        writer.sheets['diff_HestonVsBSPrice'] = worksheet2
-        writer.sheets['HestonPrices'] = worksheet3
-
-        df_BS.to_excel(writer, sheet_name='BS_ImpVolSurface', startrow=0, startcol=0)
-        df_diff.to_excel(writer, sheet_name='diff_HestonVsBSPrice', startrow=0, startcol=0)
-        df_HestonPrices.to_excel(writer, sheet_name='HestonPrices', startrow=0, startcol=0)
-        writer.save()
+    # # c1 = 0
+    # # c2 = T
+    # # c4 = 0
+    # lst_L = [5, 8, 10, 12, 15, 20, 25, 30]
+    # # a = c1 - L*np.sqrt(c2 - np.sqrt(c4)) # we use +/- L*sqrt(T)
+    # # b = c1 + L*np.sqrt(c2 - np.sqrt(c4))
+    #
+    # years = 25  # Farthest maturity
+    # mat = [14 / 360, 30 / 360, 60 / 360, 0.5]
+    # mat.extend([i for i in range(1, years + 1)])
+    # for L in lst_L:
+    #     loopstart = time.time()
+    #     HestonPrices = np.empty([K.shape[0], len(mat)])
+    #     BS_IVs = np.empty_like(HestonPrices)
+    #     for i in range(0, len(mat)):
+    #         T = mat[i]
+    #         a = -L * np.sqrt(T)
+    #         b = L * np.sqrt(T)
+    #         prices = price_Heston_CosMethod(S0,K,kappa, vbar, gamma, rho,v0,rfr=r,maturity=T,a=a,b=b,N=N)
+    #         HestonPrices[:, i] = prices
+    #
+    #     df_HestonPrices = pd.DataFrame(data = HestonPrices.T, index=mat, columns = K)
+    #     df_HestonPrices.reset_index(inplace=True)
+    #
+    #     df_BS_IV = pd.DataFrame()
+    #     for strike in K:
+    #         df_BS_IV[strike] = df_HestonPrices.apply(lambda x: getBS_ImpVol(x[strike],100,
+    #                                                                                     strike,
+    #                                                                                     0.03,
+    #                                                                                     x['index'],
+    #                                                                                     "call"), axis=1)
+    #
+    #     # Check if the BS analytical price matched using computed IV's
+    #     BS_analyticalPrice = np.empty_like(HestonPrices)
+    #     for i in range(0, len(mat)):
+    #         T = mat[i]
+    #         sigma_new = df_BS_IV.loc[i, :]
+    #         BS_analyticalPrice[:, i] = price_BS_analytical(S0, K, r, sigma_new, T)
+    #
+    #
+    #     diff = HestonPrices - BS_analyticalPrice
+    #     path_surface = outputPath + "BSImpVol_Surface_N{}k_L{}".format(int(N / 1000), L)
+    #     path_diff = outputPath + "HestonVsBS_Diff_Surface_N{}k_L{}".format(int(N / 1000), L)
+    #     path_priceSurface = outputPath + "HestonPrice_Surface_N{}k_L{}".format(int(N / 1000), L)
+    #     plot_surface(df_BS_IV.to_numpy(), K, mat, x_label="Strikes", y_label="Time to Maturity", z_label="BS Imp Vol",
+    #                  title="BS ImpVol Surface", save=True, filePath=path_surface+".png")
+    #     plot_surface(diff.T, K, mat, x_label="Strikes", y_label="Time to Maturity", z_label="Diff",
+    #                  title="Price Difference", save=True, filePath=path_diff+"_priceDiff.png")
+    #     plot_surface(HestonPrices.T, K, mat, x_label="Strikes", y_label="Time to Maturity", z_label="BS Imp Vol",
+    #                  title="Heston Surface", save=True, filePath=path_priceSurface+".png")
+    #
+    #     cols = ["2w","1M","3M","6M"]
+    #     cols.extend(["{}Y".format(i) for i in range(1, years + 1)])
+    #     df_BS = pd.DataFrame(data=df_BS_IV.to_numpy().T,
+    #                          index=K,
+    #                          columns=cols)
+    #     df_diff = pd.DataFrame(data=diff,
+    #                          index=K,
+    #                          columns=cols)
+    #     df_HestonPrices = pd.DataFrame(data=HestonPrices,
+    #                          index=K,
+    #                          columns=cols)
+    #     writer = pd.ExcelWriter(path_surface+".xlsx", engine='xlsxwriter')
+    #     workbook = writer.book
+    #     worksheet1 = workbook.add_worksheet('BS_ImpVolSurface')
+    #     worksheet2= workbook.add_worksheet('diff_HestonVsBSPrice')
+    #     worksheet3 = workbook.add_worksheet('HestonPrices')
+    #     writer.sheets['BS_ImpVolSurface'] = worksheet1
+    #     writer.sheets['diff_HestonVsBSPrice'] = worksheet2
+    #     writer.sheets['HestonPrices'] = worksheet3
+    #
+    #     df_BS.to_excel(writer, sheet_name='BS_ImpVolSurface', startrow=0, startcol=0)
+    #     df_diff.to_excel(writer, sheet_name='diff_HestonVsBSPrice', startrow=0, startcol=0)
+    #     df_HestonPrices.to_excel(writer, sheet_name='HestonPrices', startrow=0, startcol=0)
+    #     writer.save()

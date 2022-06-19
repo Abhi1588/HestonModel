@@ -37,4 +37,7 @@ def Heston_Char_func(u, kappa, vbar, gamma, rho,v0,rfr,maturity):
     return cf
 
 def _adj_Heston_Char_func(self,u, kappa, vbar, gamma, rho,v0,rfr,maturity):
-    return Heston_Char_func(u - 1j,kappa, vbar, gamma, rho,v0,rfr,maturity)/Heston_Char_func(-1j, kappa, vbar, gamma, rho,v0,rfr,maturity)
+    return Heston_Char_func(u - 1j, kappa, vbar, gamma, rho,v0,rfr,maturity)/Heston_Char_func(-1j, kappa, vbar, gamma, rho,v0,rfr,maturity)
+
+def cir_process(kappa, vbar, gamma, Z, dt, x_i):
+    return x_i + kappa*(vbar - x_i)*dt + gamma*np.sqrt(dt)*Z
