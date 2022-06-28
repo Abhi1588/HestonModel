@@ -40,4 +40,7 @@ def _adj_Heston_Char_func(self,u, kappa, vbar, gamma, rho,v0,rfr,maturity):
     return Heston_Char_func(u - 1j, kappa, vbar, gamma, rho,v0,rfr,maturity)/Heston_Char_func(-1j, kappa, vbar, gamma, rho,v0,rfr,maturity)
 
 def cir_process(kappa, vbar, gamma, Z, dt, x_i):
-    return x_i + kappa*(vbar - x_i)*dt + gamma*np.sqrt(dt)*Z
+    return x_i + kappa*(vbar - x_i)*dt + gamma*np.sqrt(dt*x_i)*Z
+
+def stock_process(S_i,rfr,vol,dt,Z):
+    return S_i + rfr*S_i*dt + vol*S_i*Z
